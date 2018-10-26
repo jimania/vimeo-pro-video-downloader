@@ -50,7 +50,7 @@ class VimeoCustomStatus extends Command
                 $data['video_main_url'] = $source['link'];
                 $data['size'] = $source['size'];
                 $data['md5'] = $source['md5'];
-                $data['type'] = $source['type']; //this is always source from vimeo, not to rely on
+                //$data['type'] = $source['type']; //this is always source from vimeo, not to rely on
             }
         }
 
@@ -60,22 +60,14 @@ class VimeoCustomStatus extends Command
     private function findSourceVideo($video_id)
     {
         $latestRequest = Vimeo::request('/me/videos/' . $video_id, ['per_page' => 10], 'GET');
-//        dd($latestRequest);
+        //echo (var_dump($latestRequest));
+        if (intval($latestRequest['status'])!=200) {
+            throw new \Exception('OOOps video not found, Error: '.$latestRequest['body']['error']."\n".$latestRequest['body']['developer_message']."\n");
+        }
         $dataV = $this->getExactlySourceQuality($latestRequest);
 
-        if(is_null($dataV)){
-            $dataV['video_main_url'] = isset($latestRequest['body']['files'][0]['link']) ? $latestRequest['body']['download'][0]['link'] : $latestRequest['files']['download'][0][0]['link'];
-            $dataV['size'] = isset($latestRequest['body']['files'][0]['size']) ? $latestRequest['body']['files'][0]['size'] : $latestRequest['body']['files'][0][0]['size'];
-            $dataV['md5'] = isset($latestRequest['body']['files'][0]['md5']) ? $latestRequest['body']['files'][0]['md5'] : $latestRequest['body']['files'][0][0]['md5'];
-            $dataV['type'] = isset($latestRequest['body']['files'][0]['type']) ? $latestRequest['body']['files'][0]['type'] : $latestRequest['body']['files'][0][0]['type'];
-        }
-
-        $video_extension = explode("/",$dataV['type']);
-        $dataV['video_extension'] = isset($video_extension[1]) ? ($video_extension[1]) : 'mp4';
         $dataV['video_uri'] = $latestRequest['body']['uri'];
-        $dataV['video_id'] = $video_id;
         $dataV['name'] = $latestRequest['body']['name'];
-        $dataV['status'] = 2;
         $dataV['rateLimit'] = $latestRequest['headers'];
         return $dataV;
     }
@@ -106,66 +98,73 @@ class VimeoCustomStatus extends Command
     {
         $gDisk = Storage::disk('gcs');
         $localDisk = Storage::disk('public');
+
+        $jsonArray = [];
+
         $video_id = $this->argument('video_id');
         $client_id = $this->argument('client_id');
         $extension = $this->argument('extension');
 
+        $jsonArray['client_id'] = $client_id;
+        $jsonArray['video_id'] = $video_id;
+        $jsonArray['time_started'] = Carbon::now();
 
-
-
-
-        $targetGCSFilename = "Don't know yet";
 
         try {
+
             $targetUrl = $this->findSourceVideo($video_id);
             $this->rateLimitSleep($targetUrl['rateLimit']);
-            $jsonArray = ($targetUrl);
-            $jsonArray['time_started'] = Carbon::now();
             $fromUrl = $targetUrl['video_main_url'];
-            $jsonArray['client_id'] = $client_id;
+            unset($targetUrl['rateLimit']);
+            $jsonArray=array_merge($jsonArray, $targetUrl);
             $bucket = $value = config('app.gcs_bucket');
-            $targetGCSFilename = $bucket . $client_id . "/" . $video_id . "." .$extension;
-            $localTempFileName = 'vimeoTemp/'.$video_id.'.'.$extension;
+            $targetGCSFilename = $bucket . $client_id . "/" . $video_id . "." . $extension;
+            $localTempFileName = 'VimeoTemp/' . $video_id . '.' . $extension;
+
+            $jsonArray['Result'] = 'Success';
+
 
             if (!$gDisk->exists($targetGCSFilename)) {
 
-                $data =file($fromUrl);
-                $localDisk->put($localTempFileName,$data);
-
+                $data = file($fromUrl);
+                $localDisk->put($localTempFileName, $data);
                 $contents = $localDisk->get($localTempFileName);
+                $gDisk->put($targetGCSFilename, $contents);
 
-                $gDisk->put($targetGCSFilename , $contents);
-
-                echo "Gcloud uploaded!";
+                echo "Gcloud uploaded!\n";
                 $localDisk->delete($localTempFileName);
 
-
                 //check size
-                $gSize = $gDisk->size($targetGCSFilename ) . "\n";
-                echo('size '.$jsonArray['size'].' vs '.$gSize."\n");
-                $jsonArray['size'];
+                $gSize = $gDisk->size($targetGCSFilename) . "\n";
+                echo('size ' . $jsonArray['size'] . ' vs ' . $gSize . "\n");
+
                 if ($gSize != $jsonArray['size']) {
-                    $jsonArray['size_error'] = 'error on transfer file size ' . $gSize . ' doesnt match with vimeo file size ' . $jsonArray['size'];
-                } else {
-                    $jsonArray['size_success'] = 'file size  on transfer file size ' . $gSize . ' matched with vimeo file size ' . $jsonArray['size'];
+                    $jsonArray['Result'] = 'Failed';
+                    $jsonArray['Error_Reason'] = 'error on transfer file size ' . $gSize . ' do not match with vimeo file size ' . $jsonArray['size'];
                 }
-
-                $ended_time = Carbon::now();
-                $jsonArray['ended_time'] = $ended_time;
-                // now time to update ended time and elapsed time.
-                $jsonArray['elapsed_time'] = $ended_time->diffInSeconds($jsonArray['time_started']);
-
-                $gDisk->append('video_targets.json', json_encode($jsonArray));
-            }else{
-                echo "already Exists!\n";
+                //can't check md5 no interface with google cloud with current api
+                //todo might check with our database file size.
+            } else {
+                $jsonArray['Result'] = 'Failed';
+                $jsonArray['Error_Reason'] = 'File already exists in the cloud';
             }
 
+        }
 
-        }catch (\Exception $ex) {
-            //if already created
+        catch (\Exception $ex) {
             $error = $ex->getMessage()."\n".$ex->getLine()."\n".$ex->getTraceAsString();
-            echo($error);
+            echo ($ex->getMessage());
             Log::debug($error);
+            $jsonArray['Result'] = 'Failed';
+            $jsonArray['Error_Reason'] = "Exception:\n".$error;
+        } finally {
+            $ended_time = Carbon::now();
+            $jsonArray['ended_time'] = $ended_time;
+            // now time to update ended time and elapsed time.
+            $jsonArray['elapsed_time'] = $ended_time->diffInRealSeconds($jsonArray['time_started']);
+            $gDisk->append('video_targets.json', json_encode($jsonArray).',');
+
+            //$localDisk->append('VimeoTemp/local.json',json_encode($jsonArray).',');
         }
     }
 
