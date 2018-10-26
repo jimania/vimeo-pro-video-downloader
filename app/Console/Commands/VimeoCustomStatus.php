@@ -15,7 +15,7 @@ class VimeoCustomStatus extends Command
      *
      * @var string
      */
-    protected $signature = 'vimeo:download {client_id} {video_id}';
+    protected $signature = 'vimeo:download {client_id} {video_id} {extension}';
 
     /**
      * The console command description.
@@ -46,10 +46,11 @@ class VimeoCustomStatus extends Command
         foreach ($latestRequest['body']['download'] as $source){
             if($source['quality'] == 'source')
             {
+                //echo(var_dump($source));
                 $data['video_main_url'] = $source['link'];
                 $data['size'] = $source['size'];
                 $data['md5'] = $source['md5'];
-                $data['type'] = $source['type'];
+                $data['type'] = $source['type']; //this is always source from vimeo, not to rely on
             }
         }
 
@@ -61,6 +62,7 @@ class VimeoCustomStatus extends Command
         $latestRequest = Vimeo::request('/me/videos/' . $video_id, ['per_page' => 10], 'GET');
 //        dd($latestRequest);
         $dataV = $this->getExactlySourceQuality($latestRequest);
+
         if(is_null($dataV)){
             $dataV['video_main_url'] = isset($latestRequest['body']['files'][0]['link']) ? $latestRequest['body']['download'][0]['link'] : $latestRequest['files']['download'][0][0]['link'];
             $dataV['size'] = isset($latestRequest['body']['files'][0]['size']) ? $latestRequest['body']['files'][0]['size'] : $latestRequest['body']['files'][0][0]['size'];
@@ -80,7 +82,8 @@ class VimeoCustomStatus extends Command
 
 
         private function rateLimitSleep($header){
-            $threshold = 1;
+         //echo(var_dump($header));
+            $threshold = 5; // safer for threads
             if ($header['X-RateLimit-Remaining'] !== null && $header['X-RateLimit-Remaining'] <= $threshold) {
                 $date = Carbon::parse($header['X-RateLimit-Reset'], 'UTC');
 
@@ -105,76 +108,64 @@ class VimeoCustomStatus extends Command
         $localDisk = Storage::disk('public');
         $video_id = $this->argument('video_id');
         $client_id = $this->argument('client_id');
-        $targetUrl = $this->findSourceVideo($video_id);
-        $this->rateLimitSleep($targetUrl['rateLimit']);
+        $extension = $this->argument('extension');
 
-        $jsonArray = ($targetUrl);
-        $jsonArray['client_id'] = $client_id;
-        $jsonArray['time_started'] = Carbon::now();
 
-        $fromUrl = $targetUrl['video_main_url'];
+
+
+
+        $targetGCSFilename = "Don't know yet";
+
         try {
-            // lets make a directory.
-            try {
-                $bucket = $value = config('app.gcs_bucket');
-                $gcs_base_url = config('app.gcs_base_url');
-                $localDisk->makeDirectory($bucket.$client_id);
-//                exec(mkdir($gcs_base_url.$bucket.$client_id, 0777));
-            } catch (\Exception $ex) {
-                //if already created
-                Log::info($ex->getMessage());
-            }
-            $local_base_url = $gcs_base_url.$bucket.$client_id;
-//            echo $local_base_url."\n";
-            // start downloading the exact video.
-            if (!$gDisk->has($bucket . $client_id . "/" . $video_id . "." .$jsonArray['video_extension'])) {
-            $output = shell_exec('wget "' . $fromUrl . '" -O '.$local_base_url."/" . $video_id . "." .$jsonArray['video_extension']);
-            \Log::info($output);
+            $targetUrl = $this->findSourceVideo($video_id);
+            $this->rateLimitSleep($targetUrl['rateLimit']);
+            $jsonArray = ($targetUrl);
+            $jsonArray['time_started'] = Carbon::now();
+            $fromUrl = $targetUrl['video_main_url'];
+            $jsonArray['client_id'] = $client_id;
+            $bucket = $value = config('app.gcs_bucket');
+            $targetGCSFilename = $bucket . $client_id . "/" . $video_id . "." .$extension;
+            $localTempFileName = 'vimeoTemp/'.$video_id.'.'.$extension;
 
-            //now time to put in gcloud storage
+            if (!$gDisk->exists($targetGCSFilename)) {
 
-            $gDisk->makeDirectory($bucket.$client_id);
-            echo "Now we need to upload on gcloucd!"."\n";
-            $contents = $localDisk->get($bucket.$client_id."/".$video_id.".mp4");
+                $data =file($fromUrl);
+                $localDisk->put($localTempFileName,$data);
 
-            $gDisk->put($bucket.$client_id."/".$video_id.".mp4", $contents);
-            echo "Gcloud uploaded!";
-            //now delete file from local
-            $localDisk->delete($bucket . $client_id . "/" . $video_id . ".mp4");
+                $contents = $localDisk->get($localTempFileName);
 
-            $ended_time = Carbon::now();
-            $jsonArray['ended_time'] = $ended_time;
-            // now time to update ended time and elapsed time.
-            $jsonArray['elapsed_time'] = $ended_time->diffInSeconds($jsonArray['time_started']);
+                $gDisk->put($targetGCSFilename , $contents);
 
-            //check size
-            $gSize = $gDisk->size($bucket.$client_id."/".$video_id.".mp4")."\n";
-            $jsonArray['size'];
-            if($gSize != $jsonArray['size']){
-                $jsonArray['size_error'] = 'error on transfer file size '.$gSize.' doesnt match with vimeo file size '.$jsonArray['size'];
+                echo "Gcloud uploaded!";
+                $localDisk->delete($localTempFileName);
+
+
+                //check size
+                $gSize = $gDisk->size($targetGCSFilename ) . "\n";
+                echo('size '.$jsonArray['size'].' vs '.$gSize."\n");
+                $jsonArray['size'];
+                if ($gSize != $jsonArray['size']) {
+                    $jsonArray['size_error'] = 'error on transfer file size ' . $gSize . ' doesnt match with vimeo file size ' . $jsonArray['size'];
+                } else {
+                    $jsonArray['size_success'] = 'file size  on transfer file size ' . $gSize . ' matched with vimeo file size ' . $jsonArray['size'];
+                }
+
+                $ended_time = Carbon::now();
+                $jsonArray['ended_time'] = $ended_time;
+                // now time to update ended time and elapsed time.
+                $jsonArray['elapsed_time'] = $ended_time->diffInSeconds($jsonArray['time_started']);
+
+                $gDisk->append('video_targets.json', json_encode($jsonArray));
             }else{
-                $jsonArray['size_success'] = 'file size  on transfer file size '.$gSize.' matched with vimeo file size '.$jsonArray['size'];
-            }
-
-
-
-            // store into json data
-            $oldJsonData = Storage::disk('public')->get('/json/video_targets.json');
-            $oldJsonData = json_decode($oldJsonData);
-            $oldJsonData = ((array)$oldJsonData);
-
-            array_push($oldJsonData, $jsonArray);
-
-            $localDisk->put('/json/video_targets.json', json_encode($oldJsonData));
-            $gDisk->put('video_targets.json', json_encode($oldJsonData));
-            }else{
-                echo "already Exists!";
+                echo "already Exists!\n";
             }
 
 
         }catch (\Exception $ex) {
             //if already created
-            Log::debug($ex->getMessage());
+            $error = $ex->getMessage()."\n".$ex->getLine()."\n".$ex->getTraceAsString();
+            echo($error);
+            Log::debug($error);
         }
     }
 
