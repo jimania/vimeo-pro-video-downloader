@@ -16,7 +16,8 @@
         "nesbot/carbon": "^1.33",
         "superbalist/flysystem-google-storage": "^7.1",
         "superbalist/laravel-google-cloud-storage": "^2.0",
-        "vimeo/laravel": "^5.1"
+        "vimeo/laravel": "^5.1",
+        "ralouphie/mimey":"^1.0"
     },
     "require-dev": {
         "beyondcode/laravel-dump-server": "^1.0",

@@ -12,8 +12,7 @@ class MainVimeo extends Command
      *
      * @var string
      */
-    protected $signature = 'vimeo:start {no?} {client_id?} {--video_ids=}';
-
+    protected $signature = 'vimeo:start {no} {client_id} {infile}';
     /**
      * The console command description.
      *
@@ -36,33 +35,33 @@ class MainVimeo extends Command
      *
      * @return mixed
      */
-
-    private function getFromJson(){
-        $path = storage_path() . "/json/video_feed.json"; // ie: /var/www/laravel/app/storage/json/filename.json
-        $json = json_decode(file_get_contents($path), true);
-        return $json;
-    }
-
     public function handle()
     {
-        $no_of_commands = $this->argument('no',0);
-        $client_id = $this->argument('client_id',Null);
-        if($no_of_commands > 0){
-            for($i=1;$i<=$no_of_commands;$i++){
-                    call_in_background('vimeo:threads');
-            }
+        /*        if (count($this->argument())!=3) {
+                    echo ('Wrong command use :  php artisan '. $this->signature);
+                    exit -1;
+                }*/
+        $no_of_commands = $this->argument('no');
+        $client_id = $this->argument('client_id');
+        $in_file = $this->argument('infile');
+        $json = json_decode(file_get_contents($in_file), true);
 
-        }else{
+        $chunkSize = round( count($json) / $no_of_commands);
+        $chunks = array_chunk($json,$chunkSize  );
+        $in_file = str_replace('.json','',$in_file);
 
-            $columns = $this->option('video_ids');
-            $final_columns = [];
-            foreach(explode(",", $columns) as $column) {
-                $final_columns[] = $column;
-            }
-            $video_ids = $final_columns;
-            foreach ($video_ids as $video_id){
-                call_in_background('vimeo:download '.$client_id.' '.$video_id);
-            }
+        echo(count($chunks));
+        for ($i = 0; $i < count($chunks); $i++) {
+            $cmd_in_file = $in_file.$i.'.json';
+            $cmd_out_file = $in_file.'_out'.$i.'.json';
+            echo $cmd_in_file."\n";
+            echo $cmd_out_file."\n";
+            echo count($chunks[$i])."\n";
+            file_put_contents($cmd_in_file,json_encode($chunks[$i],JSON_PRETTY_PRINT));
+
+            call_in_background('vimeo:threads '.$cmd_in_file.' '.$cmd_out_file);
+
         }
+
     }
 }

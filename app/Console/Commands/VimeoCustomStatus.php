@@ -15,7 +15,7 @@ class VimeoCustomStatus extends Command
      *
      * @var string
      */
-    protected $signature = 'vimeo:download {client_id} {video_id} {extension}';
+    protected $signature = 'vimeo:download {client_id} {video_id} {mime}';
 
     /**
      * The console command description.
@@ -96,14 +96,17 @@ class VimeoCustomStatus extends Command
 
     public function handle()
     {
+        $video_id = $this->argument('video_id');
+        $client_id = $this->argument('client_id');
+        $mime = $this->argument('mime');
+        $mimes = new \Mimey\MimeTypes;
+        $extension = $mimes->getExtension($mime);
+
         $gDisk = Storage::disk('gcs');
         $localDisk = Storage::disk('public');
 
         $jsonArray = [];
 
-        $video_id = $this->argument('video_id');
-        $client_id = $this->argument('client_id');
-        $extension = $this->argument('extension');
 
         $jsonArray['client_id'] = $client_id;
         $jsonArray['video_id'] = $video_id;
