@@ -41,7 +41,8 @@ class VimeoOpenThreads extends Command
     private function getExactlySourceQuality($latestRequest)
     {
         $data = [];
-        if (isset($latestRequest['body']['download'][0]))
+        $sourceFound = false;
+        if (isset($latestRequest['body']['download'][0])) {
             foreach ($latestRequest['body']['download'] as $source) {
                 if ($source['quality'] == 'source') {
                     //echo(var_dump($source));
@@ -49,9 +50,16 @@ class VimeoOpenThreads extends Command
                     $data['size'] = $source['size'];
                     $data['md5'] = $source['md5'];
                     //$data['type'] = $source['type']; //this is always source from vimeo, not to rely on
+                    $sourceFound = true;
                 }
             }
+        }else {
+            throw new \Exception('OOOps video not found, Error: could not find section "download" in the body of the vimeo reply'."\n");
+        }
 
+        if (!$sourceFound) {
+            throw new \Exception('OOOps video not found, Error: no Source section found in vimeo downloads'."\n");
+        }
         return $data;
     }
 
@@ -110,6 +118,8 @@ class VimeoOpenThreads extends Command
             $video_id = $video['VimeoID'];
             $client_id = $video['ClientID'];
             $mime = $video['MimeType'];
+            $sourceFileSize = $video['FileSize'];
+            echo ('Processing video: '.$video_id." mimetype: ".$mime. " size: ". $sourceFileSize."\n");
             $mimes = new \Mimey\MimeTypes;
             $extension = $mimes->getExtension($mime);
 
@@ -154,8 +164,12 @@ class VimeoOpenThreads extends Command
                         $jsonArray['Result'] = 'Failed';
                         $jsonArray['Error_Reason'] = 'error on transfer file size ' . $gSize . ' do not match with vimeo file size ' . $jsonArray['size'];
                     }
+                    if ($sourceFileSize != $jsonArray['size']) {
+                        $jsonArray['Result'] = 'Warning';
+                        $jsonArray['Warning_Reason'] = 'The file size in our records (source json): ' . $sourceFileSize. ' do not match with vimeo file size ' . $jsonArray['size'];
+                    }
+
                     //can't check md5 no interface with google cloud with current api
-                    //todo might check with our database file size.
                 } else {
                     $jsonArray['Result'] = 'Failed';
                     $jsonArray['Error_Reason'] = 'File already exists in the cloud';

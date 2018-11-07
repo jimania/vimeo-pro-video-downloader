@@ -59,7 +59,7 @@ class VimeoCustomStatus extends Command
 
     private function findSourceVideo($video_id)
     {
-        $latestRequest = Vimeo::request('/me/videos/' . $video_id, ['per_page' => 10], 'GET');
+        $latestRequest = Vimeo::request('/me/videos/' . $video_id, ['per_page' => 20], 'GET');
         //echo (var_dump($latestRequest));
         if (intval($latestRequest['status'])!=200) {
             throw new \Exception('OOOps video not found, Error: '.$latestRequest['body']['error']."\n".$latestRequest['body']['developer_message']."\n");

@@ -12,7 +12,7 @@ class MainVimeo extends Command
      *
      * @var string
      */
-    protected $signature = 'vimeo:start {no} {client_id} {infile}';
+    protected $signature = 'vimeo:start {no} {infile}';
     /**
      * The console command description.
      *
@@ -42,7 +42,6 @@ class MainVimeo extends Command
                     exit -1;
                 }*/
         $no_of_commands = $this->argument('no');
-        $client_id = $this->argument('client_id');
         $in_file = $this->argument('infile');
         $json = json_decode(file_get_contents($in_file), true);
 
