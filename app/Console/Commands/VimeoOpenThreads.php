@@ -65,7 +65,7 @@ class VimeoOpenThreads extends Command
 
     private function findSourceVideo($video_id)
     {
-        $latestRequest = Vimeo::request('/me/videos/' . $video_id, ['per_page' => 10], 'GET');
+        $latestRequest = Vimeo::request('/me/videos/' . $video_id.'?fields=uri,duration,download,name', ['per_page' => 10], 'GET');
         //echo (var_dump($latestRequest));
         if (intval($latestRequest['status']) != 200) {
             throw new \Exception('OOOps video not found, Error: ' . $latestRequest['body']['error'] . "\n" . $latestRequest['body']['developer_message'] . "\n");
@@ -73,7 +73,7 @@ class VimeoOpenThreads extends Command
         $dataV = $this->getExactlySourceQuality($latestRequest);
 
         $dataV['video_uri'] = $latestRequest['body']['uri'];
-        $dataV['name'] = $latestRequest['body']['name'];
+        //$dataV['name'] = $latestRequest['body']['name'];
         $dataV['rateLimit'] = $latestRequest['headers'];
         return $dataV;
     }
@@ -82,7 +82,7 @@ class VimeoOpenThreads extends Command
     private function rateLimitSleep($header)
     {
         //echo(var_dump($header));
-        $threshold = 5; // safer for threads
+        $threshold = 2000; // safer for threads
         if ($header['X-RateLimit-Remaining'] !== null && $header['X-RateLimit-Remaining'] <= $threshold) {
             $date = Carbon::parse($header['X-RateLimit-Reset'], 'UTC');
 
