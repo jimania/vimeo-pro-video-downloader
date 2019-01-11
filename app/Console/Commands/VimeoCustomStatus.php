@@ -66,7 +66,7 @@ class VimeoCustomStatus extends Command
         //echo (var_dump($latestRequest['body']));
 
         if (intval($latestRequest['status'])!=200) {
-            throw new \Exception('OOOps video not found, Error: '.$latestRequest['body']['error']."\n".$latestRequest['body']['developer_message']."\n");
+            throw new \Exception('OOOps video not found, Error: '.$latestRequest['body']['error']."\n");
         }
         $dataV = $this->getExactlySourceQuality($latestRequest);
 
