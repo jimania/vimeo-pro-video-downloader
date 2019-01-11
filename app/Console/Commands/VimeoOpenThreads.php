@@ -30,6 +30,7 @@ class VimeoOpenThreads extends Command
      */
     public function __construct()
     {
+        ini_set('memory_limit','5120M');
         parent::__construct();
     }
 
