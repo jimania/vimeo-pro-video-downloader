@@ -82,7 +82,7 @@ class VimeoOpenThreads extends Command
         $latestRequest = Vimeo::request('/me/videos/' . $video_id.'?fields=uri,duration,download,name', ['per_page' => 10], 'GET');
         //echo (var_dump($latestRequest));
         if (intval($latestRequest['status']) != 200) {
-            throw new \Exception('OOOps video not found, Error: ' . $latestRequest['body']['error'] . "\n" . $latestRequest['body']['developer_message'] . "\n");
+            throw new \Exception('OOOps video not found, Error: ' . $latestRequest['body']['error'] . "\n");
         }
         $dataV = $this->getExactlySourceQuality($latestRequest);
 
