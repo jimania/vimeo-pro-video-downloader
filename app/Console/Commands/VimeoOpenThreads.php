@@ -96,7 +96,7 @@ class VimeoOpenThreads extends Command
     private function rateLimitSleep($header)
     {
         //echo(var_dump($header));
-        $threshold = 2000; // safer for threads
+        $threshold = 800; // safer for threads
         if ($header['X-RateLimit-Remaining'] !== null && $header['X-RateLimit-Remaining'] <= $threshold) {
             $date = Carbon::parse($header['X-RateLimit-Reset'], 'UTC');
 
