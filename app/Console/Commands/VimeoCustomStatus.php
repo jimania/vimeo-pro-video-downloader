@@ -137,10 +137,9 @@ class VimeoCustomStatus extends Command
 
             if (!$gDisk->exists($targetGCSFilename)) {
 
-               // $data = file($fromUrl);
-               // $localDisk->put($localTempFileName, $data);
-               // $contents = $localDisk->get($localTempFileName);
-                $contents = fopen($fromUrl,'r');
+                $data = fopen($fromUrl,'r');
+                $localDisk->put($localTempFileName, $data);
+                $contents = $localDisk->readStream($localTempFileName);
                 $gDisk->put($targetGCSFilename, $contents);
 
                 echo "Gcloud uploaded!\n";
