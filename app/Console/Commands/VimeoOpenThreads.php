@@ -162,9 +162,9 @@ class VimeoOpenThreads extends Command
 
                 if (!$gDisk->exists($targetGCSFilename)) {
 
-                    $data = file($fromUrl);
+                    $data = fopen($fromUrl,'r');
                     $localDisk->put($localTempFileName, $data);
-                    $contents = $localDisk->get($localTempFileName);
+                    $contents = $localDisk->readStream($localTempFileName);
                     $gDisk->put($targetGCSFilename, $contents);
 
                     //echo "Gcloud uploaded!\n";
