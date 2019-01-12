@@ -128,6 +128,7 @@ class VimeoOpenThreads extends Command
         $localDisk = Storage::disk('public');
         $video_ids = json_decode(file_get_contents($in_file), true);
         $errorArray = [];
+        $bucket = $value = config('app.gcs_bucket');
         foreach ($video_ids as $video) {
             $video_id = $video['VimeoID'];
             $client_id = $video['ClientID'];
@@ -145,6 +146,8 @@ class VimeoOpenThreads extends Command
             $jsonArray['time_started'] = Carbon::now();
 
 
+            $targetGCSFilename = $bucket . $client_id . "/" . $video_id . "." . $extension;
+            $localTempFileName = 'VimeoTemp/' . $video_id . '.' . $extension;
             try {
 
                 $targetUrl = $this->findSourceVideo($video_id);
@@ -153,9 +156,6 @@ class VimeoOpenThreads extends Command
                 unset($targetUrl['rateLimit']);
                 unset($targetUrl['video_main_url']);
                 $jsonArray=array_merge($jsonArray, $targetUrl);
-                $bucket = $value = config('app.gcs_bucket');
-                $targetGCSFilename = $bucket . $client_id . "/" . $video_id . "." . $extension;
-                $localTempFileName = 'VimeoTemp/' . $video_id . '.' . $extension;
 
                 $jsonArray['Result'] = 'Success';
 
@@ -167,8 +167,6 @@ class VimeoOpenThreads extends Command
                     $contents = $localDisk->readStream($localTempFileName);
                     $gDisk->put($targetGCSFilename, $contents);
 
-                    //echo "Gcloud uploaded!\n";
-                    $localDisk->delete($localTempFileName);
 
                     //check size
                     $gSize = $gDisk->size($targetGCSFilename) . "\n";
@@ -177,6 +175,8 @@ class VimeoOpenThreads extends Command
                     if ($gSize != $jsonArray['size']) {
                         $jsonArray['Result'] = 'Failed';
                         $jsonArray['Error_Reason'] = 'error on transfer file size ' . $gSize . ' do not match with vimeo file size ' . $jsonArray['size'];
+                        //delete the file from the bucket, it is not good!!!
+                        $gDisk->delete($targetGCSFilename);
                     }
                     if ($sourceFileSize != $jsonArray['size']) {
                         $jsonArray['Result'] = 'Warning';
@@ -185,8 +185,8 @@ class VimeoOpenThreads extends Command
 
                     //can't check md5 no interface with google cloud with current api
                 } else {
-                    $jsonArray['Result'] = 'Failed';
-                    $jsonArray['Error_Reason'] = 'File already exists in the cloud';
+                    $jsonArray['Result'] = 'Warning';
+                    $jsonArray['Warning_Reason'] = 'File already exists in the cloud';
                 }
 
             }
@@ -198,6 +198,7 @@ class VimeoOpenThreads extends Command
                 $jsonArray['Result'] = 'Failed';
                 $jsonArray['Error_Reason'] = "Exception:\n".$error;
             } finally {
+                $localDisk->delete($localTempFileName);
                 $ended_time = Carbon::now();
                 $jsonArray['ended_time'] = $ended_time;
                 // now time to update ended time and elapsed time.
