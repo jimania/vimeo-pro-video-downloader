@@ -1,0 +1,13 @@
+version: '3'
+
+
+################################################################################
+# SERVICES
+################################################################################
+services:
+
+  phpserver:
+    image: zaherg/php-xdebug-alpine:7.2
+    volumes:
+        - .:/vimeobackup:rw
+        - ../example:/example:rw

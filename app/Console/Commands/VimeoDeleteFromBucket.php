@@ -8,14 +8,14 @@ use Illuminate\Support\Facades\Storage;
 use Vimeo\Laravel\Facades\Vimeo;
 use Illuminate\Support\Facades\Log;
 
-class VimeoOpenThreads extends Command
+class VimeoDeleteFromBucket extends Command
 {
     /**
      * The name and signature of the console command.
      *
      * @var string
      */
-    protected $signature = 'vimeo:threads {in_file} {out_file}';
+    protected $signature = 'vimeo:delete {in_file} {out_file}';
     /**
      * The console command description.
      *
@@ -125,7 +125,7 @@ class VimeoOpenThreads extends Command
 
 
         $gDisk = Storage::disk('gcs');
-        $localDisk = Storage::disk('public');
+        ;
         $video_ids = json_decode(file_get_contents($in_file), true);
         $errorArray = [];
         $bucket = $value = config('app.gcs_bucket');
@@ -141,14 +141,8 @@ class VimeoOpenThreads extends Command
             $jsonArray = [];
 
 
-            $jsonArray['ClientName'] = $video['ClientName'];
-            $jsonArray['ClientID'] = $client_id;
-            $jsonArray['VimeoID'] = $video_id;
-            $jsonArray['FileSize'] = $video['FileSize'];
-            $jsonArray['MimeType'] = $video['MimeType'];
-            $jsonArray['duration'] = $video['duration'];
-            $jsonArray['account'] = $video['account'];
-
+            $jsonArray['client_id'] = $client_id;
+            $jsonArray['video_id'] = $video_id;
             $jsonArray['time_started'] = Carbon::now();
 
 
@@ -203,17 +197,12 @@ class VimeoOpenThreads extends Command
                 Log::debug($error);
                 $jsonArray['Result'] = 'Failed';
                 $jsonArray['Error_Reason'] = "Exception:\n".$error;
-                if ($gDisk->exists($targetGCSFilename)) {
-                    $gDisk->delete($targetGCSFilename);
-                }
             } finally {
                 $localDisk->delete($localTempFileName);
                 $ended_time = Carbon::now();
-                $jsonArray['time_ended'] = $ended_time;
+                $jsonArray['ended_time'] = $ended_time;
                 // now time to update ended time and elapsed time.
                 $jsonArray['elapsed_time'] = $ended_time->diffInRealSeconds($jsonArray['time_started']);
-                $jsonArray['time_ended'] = $jsonArray['time_ended']->toDateTimeString();
-                $jsonArray['time_started'] = $jsonArray['time_started']->toDateTimeString();
                 //$gDisk->append('video_targets.json', json_encode($jsonArray).',');
                 array_push($errorArray,$jsonArray);
                 file_put_contents($out_file,json_encode($errorArray,JSON_PRETTY_PRINT));
