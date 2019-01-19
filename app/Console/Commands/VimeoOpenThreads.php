@@ -46,7 +46,6 @@ class VimeoOpenThreads extends Command
         if (isset($latestRequest['body']['download'][0])) {
             foreach ($latestRequest['body']['download'] as $source) {
                 if ($source['quality'] == 'source') {
-                    //echo(var_dump($source));
                     $data['video_main_url'] = $source['link'];
                     $data['size'] = $source['size'];
                     $data['md5'] = $source['md5'];
@@ -72,26 +71,34 @@ class VimeoOpenThreads extends Command
         }
 
         if (!$sourceFound) {
-            throw new \Exception('OOOps video not found, Error: no Source section found in vimeo downloads'."\n");
+            getBestQuality($latestRequest);
         }
         return $data;
     }
 
-    private function findSourceVideo($video_id)
+    private function getBestQuality($latestRequest)
     {
-        $latestRequest = Vimeo::request('/me/videos/' . $video_id.'?fields=uri,duration,download,name', ['per_page' => 10], 'GET');
-        //echo (var_dump($latestRequest));
-        if (intval($latestRequest['status']) != 200) {
-            throw new \Exception('OOOps video not found, Error: ' . $latestRequest['body']['error'] . "\n");
+        $data = [];
+        $data['size'] = 0;
+        $sourceFound = false;
+        if (isset($latestRequest['body']['download'][0])) {
+            foreach ($latestRequest['body']['download'] as $source) {
+                if ($source['quality'] != 'source' and $source['size'] >$data['size']) {
+                    $data['video_main_url'] = $source['link'];
+                    $data['size'] = $source['size'];
+                    $data['md5'] = $source['md5'];
+                    $sourceFound = true;
+                }
+            }
+        }else {
+            throw new \Exception('OOOps video not found, Error: could not find section "download" in the body of the vimeo reply'."\n");
         }
-        $dataV = $this->getExactlySourceQuality($latestRequest);
 
-        $dataV['video_uri'] = $latestRequest['body']['uri'];
-        //$dataV['name'] = $latestRequest['body']['name'];
-        $dataV['rateLimit'] = $latestRequest['headers'];
-        return $dataV;
+        if (!$sourceFound) {
+            throw new \Exception('OOOps video not found, Error: no Source section found in vimeo downloads'."\n");
+        }
+        return $data;
     }
-
 
     private function rateLimitSleep($header)
     {
@@ -128,6 +135,7 @@ class VimeoOpenThreads extends Command
         $localDisk = Storage::disk('public');
         $video_ids = json_decode(file_get_contents($in_file), true);
         $errorArray = [];
+        $logArray = [];
         $bucket = $value = config('app.gcs_bucket');
         foreach ($video_ids as $video) {
             $video_id = $video['VimeoID'];
@@ -154,16 +162,27 @@ class VimeoOpenThreads extends Command
 
             $targetGCSFilename = $bucket . $client_id . "/" . $video_id . "." . $extension;
             $localTempFileName = 'VimeoTemp/' . $video_id . '.' . $extension;
+            $targetGCSFilename_mp4 = $bucket . $client_id . "/" . $video_id . ".mp4";
+            $localTempFileName_mp4 = 'VimeoTemp/' . $video_id . '.mp4';
+
             try {
 
-                $targetUrl = $this->findSourceVideo($video_id);
-                $this->rateLimitSleep($targetUrl['rateLimit']);
+
+                $latestRequest = Vimeo::request('/me/videos/' . $video_id.'?fields=uri,duration,download,name', ['per_page' => 10], 'GET');
+                //echo (var_dump($latestRequest));
+                if (intval($latestRequest['status']) != 200) {
+                    throw new \Exception('OOOps video not found, Error: ' . $latestRequest['body']['error'] . "\n");
+                }
+                $this->rateLimitSleep($latestRequest['headers']);
+
+                $targetUrl = $this->getExactlySourceQuality($latestRequest);
+
                 $fromUrl = $targetUrl['video_main_url'];
-                unset($targetUrl['rateLimit']);
                 unset($targetUrl['video_main_url']);
                 $jsonArray=array_merge($jsonArray, $targetUrl);
 
                 $jsonArray['Result'] = 'Success';
+                $jsonArray['GCS_Target_File'] = $targetGCSFilename;
 
 
                 if (!$gDisk->exists($targetGCSFilename)) {
@@ -188,8 +207,22 @@ class VimeoOpenThreads extends Command
                         $jsonArray['Result'] = 'Warning';
                         $jsonArray['Warning_Reason'] = 'The file size in our records (source json): ' . $sourceFileSize. ' do not match with vimeo file size ' . $jsonArray['size'];
                     }
-
                     //can't check md5 no interface with google cloud with current api
+                    if($extension !='mp4'){
+                        // also download max mp4 video
+                        $targetUrl = $this->getBestQuality($latestRequest);
+
+                        $fromUrl = $targetUrl['video_main_url'];
+                        unset($targetUrl['video_main_url']);
+                        $jsonArray['GCS_Target_File_mp4'] = $targetGCSFilename_mp4;
+
+                        $data = fopen($fromUrl,'r');
+                        $localDisk->put($localTempFileName_mp4, $data);
+                        $contents = $localDisk->readStream($localTempFileName_mp4);
+                        $gDisk->put($targetGCSFilename_mp4, $contents);
+
+                        $jsonArray['GCS_Target_File_mp4_Size']= $gDisk->size($targetGCSFilename_mp4);
+                    }
                 } else {
                     $jsonArray['Result'] = 'Warning';
                     $jsonArray['Warning_Reason'] = 'File already exists in the cloud';
@@ -206,18 +239,26 @@ class VimeoOpenThreads extends Command
                 if ($gDisk->exists($targetGCSFilename)) {
                     $gDisk->delete($targetGCSFilename);
                 }
+                if ($gDisk->exists($targetGCSFilename_mp4)) {
+                    $gDisk->delete($targetGCSFilename_mp4);
+                }
             } finally {
                 $localDisk->delete($localTempFileName);
+                $localDisk->delete($localTempFileName_mp4);
                 $ended_time = Carbon::now();
                 $jsonArray['time_ended'] = $ended_time;
                 // now time to update ended time and elapsed time.
                 $jsonArray['elapsed_time'] = $ended_time->diffInRealSeconds($jsonArray['time_started']);
                 $jsonArray['time_ended'] = $jsonArray['time_ended']->toDateTimeString();
                 $jsonArray['time_started'] = $jsonArray['time_started']->toDateTimeString();
-                //$gDisk->append('video_targets.json', json_encode($jsonArray).',');
-                array_push($errorArray,$jsonArray);
-                file_put_contents($out_file,json_encode($errorArray,JSON_PRETTY_PRINT));
-                //$localDisk->append('VimeoTemp/local.json',json_encode($jsonArray).',');
+
+                array_push($logArray, $jsonArray);
+                file_put_contents($out_file, json_encode($logArray, JSON_PRETTY_PRINT));
+
+                if ($jsonArray['Result'] == 'Failed') {
+                    array_push($errorArray, $jsonArray);
+                    file_put_contents('Failed-'.$out_file, json_encode($errorArray, JSON_PRETTY_PRINT));
+                }
             }
         }
 
