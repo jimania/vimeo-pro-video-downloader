@@ -110,6 +110,14 @@ class VimeoOpenThreads extends Command
         }
     }
 
+    function formatBytes($size, $precision = 2)
+    {
+        $size = max($size, 0);
+        $base = log($size, 1024);
+        $suffixes = array('', 'K', 'M', 'G', 'T');
+
+        return round(pow(1024, $base - floor($base)), $precision) .' '. $suffixes[floor($base)];
+    }
 
     public function handle()
     {
@@ -141,6 +149,7 @@ class VimeoOpenThreads extends Command
             $jsonArray['ClientID'] = $client_id;
             $jsonArray['VimeoID'] = $video_id;
             $jsonArray['FileSize'] = $video['FileSize'];
+            $jsonArray['FileSizeReadable'] = $this->formatBytes( $video['FileSize']);
             $jsonArray['MimeType'] = $video['MimeType'];
             $jsonArray['duration'] = $video['duration'];
             $jsonArray['account'] = $video['account'];
@@ -164,7 +173,7 @@ class VimeoOpenThreads extends Command
                 $this->rateLimitSleep($latestRequest['headers']);
 
                 $targetUrl = $this->getExactlySourceQuality($latestRequest);
-
+                $jsonArray['sizeReadable'] = $this->formatBytes($jsonArray['size']);
                 $fromUrl = $targetUrl['video_main_url'];
                 unset($targetUrl['video_main_url']);
                 $jsonArray=array_merge($jsonArray, $targetUrl);
