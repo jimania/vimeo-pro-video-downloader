@@ -53,25 +53,13 @@ class VimeoOpenThreads extends Command
                     $sourceFound = true;
                 }
             }
-            if (!$sourceFound){
-                foreach ($latestRequest['body']['download'] as $source) {
-                    if ($source['quality'] == 'hd' and $source['width'] == 1920) {
-                        //echo(var_dump($source));
-                        $data['video_main_url'] = $source['link'];
-                        $data['size'] = $source['size'];
-                        $data['md5'] = $source['md5'];
-                        //$data['type'] = $source['type']; //this is always source from vimeo, not to rely on
-                        $sourceFound = true;
-                    }
-                }
-
-            }
-        }else {
+        }
+        else {
             throw new \Exception('OOOps video not found, Error: could not find section "download" in the body of the vimeo reply'."\n");
         }
 
         if (!$sourceFound) {
-            getBestQuality($latestRequest);
+            $data = $this->getBestQuality($latestRequest);
         }
         return $data;
     }
