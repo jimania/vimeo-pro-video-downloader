@@ -173,7 +173,7 @@ class VimeoOpenThreads extends Command
                 $this->rateLimitSleep($latestRequest['headers']);
 
                 $targetUrl = $this->getExactlySourceQuality($latestRequest);
-                $jsonArray['sizeReadable'] = $this->formatBytes($jsonArray['size']);
+
                 $fromUrl = $targetUrl['video_main_url'];
                 unset($targetUrl['video_main_url']);
                 $jsonArray=array_merge($jsonArray, $targetUrl);
@@ -181,7 +181,7 @@ class VimeoOpenThreads extends Command
                 $jsonArray['Result'] = 'Success';
                 $jsonArray['GCS_Target_File'] = $targetGCSFilename;
 
-
+                $jsonArray['sizeReadable'] = $this->formatBytes($jsonArray['size']);
                 if (!$gDisk->exists($targetGCSFilename)) {
 
                     $data = fopen($fromUrl,'r');
