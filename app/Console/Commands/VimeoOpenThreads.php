@@ -133,7 +133,18 @@ class VimeoOpenThreads extends Command
         $errorArray = [];
         $logArray = [];
         $bucket = $value = config('app.gcs_bucket');
+
+        $intervalStarted = \Carbon\Carbon::now('UTC');
         foreach ($video_ids as $video) {
+
+            //------- check and slip for 15 mins after 30 mins
+            $now = \Carbon\Carbon::now('UTC');
+            $runningMinutes = $now->diffInMinutes($intervalStarted);
+            if ($runningMinutes>30) {
+                sleep(15 * 60);
+                $intervalStarted = \Carbon\Carbon::now('UTC');
+            }
+
             $video_id = $video['VimeoID'];
             $client_id = $video['ClientID'];
             $mime = $video['MimeType'];
