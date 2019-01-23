@@ -164,25 +164,25 @@ class VimeoOpenThreads extends Command
 
             try {
 
-
-                $latestRequest = Vimeo::request('/me/videos/' . $video_id.'?fields=uri,duration,download,name', ['per_page' => 10], 'GET');
-                //echo (var_dump($latestRequest));
-                if (intval($latestRequest['status']) != 200) {
-                    throw new \Exception('OOOps video not found, Error: ' . $latestRequest['body']['error'] . "\n");
-                }
-                $this->rateLimitSleep($latestRequest['headers']);
-
-                $targetUrl = $this->getExactlySourceQuality($latestRequest);
-
-                $fromUrl = $targetUrl['video_main_url'];
-                unset($targetUrl['video_main_url']);
-                $jsonArray=array_merge($jsonArray, $targetUrl);
-
                 $jsonArray['Result'] = 'Success';
                 $jsonArray['GCS_Target_File'] = $targetGCSFilename;
 
-                $jsonArray['sizeReadable'] = $this->formatBytes($jsonArray['size']);
                 if (!$gDisk->exists($targetGCSFilename)) {
+                    $latestRequest = Vimeo::request('/me/videos/' . $video_id.'?fields=uri,duration,download,name', ['per_page' => 10], 'GET');
+                    //echo (var_dump($latestRequest));
+                    if (intval($latestRequest['status']) != 200) {
+                        throw new \Exception('OOOps video not found, Error: ' . $latestRequest['body']['error'] . "\n");
+                    }
+                    $this->rateLimitSleep($latestRequest['headers']);
+
+                    $targetUrl = $this->getExactlySourceQuality($latestRequest);
+
+                    $fromUrl = $targetUrl['video_main_url'];
+                    unset($targetUrl['video_main_url']);
+                    $jsonArray=array_merge($jsonArray, $targetUrl);
+
+
+                    $jsonArray['sizeReadable'] = $this->formatBytes($jsonArray['size']);
 
                     $data = fopen($fromUrl,'r');
                     $localDisk->put($localTempFileName, $data);
