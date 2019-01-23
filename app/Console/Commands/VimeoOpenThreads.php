@@ -140,7 +140,7 @@ class VimeoOpenThreads extends Command
             //------- check and slip for 15 mins after 30 mins
             $now = \Carbon\Carbon::now('UTC');
             $runningMinutes = $now->diffInMinutes($intervalStarted);
-            if ($runningMinutes>70) {
+            if ($runningMinutes>45) {
                 die;
                 sleep(15 * 60);
                 $intervalStarted = \Carbon\Carbon::now('UTC');
