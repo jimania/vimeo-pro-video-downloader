@@ -136,15 +136,15 @@ class VimeoOpenThreads extends Command
 
         $intervalStarted = \Carbon\Carbon::now('UTC');
         foreach ($video_ids as $video) {
-
-            //------- check and slip for 15 mins after 30 mins
-            $now = \Carbon\Carbon::now('UTC');
-            $runningMinutes = $now->diffInMinutes($intervalStarted);
-            if ($runningMinutes>15) {
-                die;
-                sleep(15 * 60);
-                $intervalStarted = \Carbon\Carbon::now('UTC');
-            }
+//
+//            //------- check and slip for 15 mins after 30 mins
+//            $now = \Carbon\Carbon::now('UTC');
+//            $runningMinutes = $now->diffInMinutes($intervalStarted);
+//            if ($runningMinutes>15) {
+//                die;
+//                sleep(15 * 60);
+//                $intervalStarted = \Carbon\Carbon::now('UTC');
+//            }
 
             $video_id = $video['VimeoID'];
             $client_id = $video['ClientID'];
