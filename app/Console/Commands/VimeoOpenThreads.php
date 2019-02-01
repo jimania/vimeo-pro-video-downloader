@@ -196,7 +196,7 @@ class VimeoOpenThreads extends Command
 
                     $jsonArray['sizeReadable'] = $this->formatBytes($jsonArray['size']);
 
-                    $data = fopen($fromUrl,'r');
+                    $data = fopen(urlencode($fromUrl),'r');
                     $localDisk->put($localTempFileName, $data);
                     $contents = $localDisk->readStream($localTempFileName);
                     $gDisk->put($targetGCSFilename, $contents);
